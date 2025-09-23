@@ -1,19 +1,12 @@
-# 1TriviaPerDay
+# TriviaTime
 
- ~ Learn a new fun fact or trivia as a notification every time you login. ~
+ ~ Learn a new fun fact or trivia as a notification everyday. ~
 
 ## How it works
 
 When you open 1TriviaPerDay, a notification is sent containing a trivia question and answers (all questions and answers are from the OpenTrivia database API).
 
-To ensure that the app functions properly, **go to System Settings>General>Login Items and Extensions and add 1TriviaPerDay as a login item**. After doing this, a trivia notification will pop up everytime you login.
-
-> Now, I know what you're thinking: the app technically should be called 1TriviaPerLogin. Technically, yes. But
-> 1. That's not a catchy name
-> 2. ~~I'm lazy to make it open every day~~
-> 3. If you really want a daily trivia notification, just logout every night.
-
-> (Or, I guess, just roll with it)
+To ensure that the app functions properly, **go to System Settings>General>Login Items and Extensions and add 1TriviaPerDay as a login item**. It is highly recommended to do so.
 
 Also make sure to allow notifications for the 1TriviaPerDay app - **otherwise the app will not function properly**.
 
