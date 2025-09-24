@@ -3,19 +3,30 @@ import UserNotifications
 
 @main
 struct TriviaApp: App {
-    // ✅ Plain reference (NOT a StateObject)
-    let coordinator = AppCoordinator()
-    let notificationDelegate = NotificationDelegate() // Create an instance of the delegate
+    @StateObject private var coordinator = AppCoordinator()  // Ensure this is the only instance of AppCoordinator
+    let notificationDelegate = NotificationDelegate()
+    
 
     init() {
-        coordinator.setup()
-        UNUserNotificationCenter.current().delegate = notificationDelegate // Set the delegate
+        // Initial setup for coordinator (so the first notification can be sent immediately)
+        UNUserNotificationCenter.current().delegate = notificationDelegate
     }
 
     var body: some Scene {
-        // ✅ No visible UI
-        Settings {
-            EmptyView()
+        WindowGroup {
+            SettingsView(interval: $coordinator.notificationInterval)
+                .onAppear {
+                    // Ensure the setup is called when the view appears (after coordinator initialization)
+                    coordinator.setup()
+                }
+        }
+        .commands {
+            CommandMenu("Settings") {
+                Button("Open Settings") {
+                    // Settings window will open automatically by the system
+                }
+                .keyboardShortcut(",", modifiers: .command) // Command+, to open settings
+            }
         }
     }
 }
