@@ -38,3 +38,4 @@ class NetworkManager: ObservableObject {
             .store(in: &cancellables)
     }
 }
+
