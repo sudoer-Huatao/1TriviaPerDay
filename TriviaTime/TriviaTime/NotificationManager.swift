@@ -1,23 +1,48 @@
 import Foundation
 import UserNotifications
+internal import AppKit
 
-class NotificationManager {
+class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     
-    // Requesting notification permission
-    func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if let error = error {
-                print("Notification permission error: \(error.localizedDescription)")
-            }
-            if !granted {
-                print("Permission denied!")
-            } else {
-                print("Permission granted!")
+    override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
+    
+    // Request notification permission
+    func requestPermission(completion: @escaping (Bool) -> Void) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            DispatchQueue.main.async {
+                completion(granted)
             }
         }
     }
-
-    // Decoding HTML entities into readable characters
+    
+    // Register a dynamic notification category with answer actions
+    private func registerCategory(for trivia: TriviaQuestion) {
+        let decodedCorrect = decodeHtmlEntities(trivia.correct_answer)
+        let decodedAnswers = trivia.allAnswers.shuffled().map { decodeHtmlEntities($0) }
+        
+        // Create actions
+        let actions = decodedAnswers.map { answer in
+            UNNotificationAction(
+                identifier: answer, // use answer text as identifier
+                title: answer,
+                options: [.foreground]
+            )
+        }
+        
+        let category = UNNotificationCategory(
+            identifier: trivia.question,
+            actions: actions,
+            intentIdentifiers: [],
+            options: []
+        )
+        
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+    
+    // Decode HTML entities
     func decodeHtmlEntities(_ text: String) -> String {
         guard let data = text.data(using: .utf8) else { return text }
         let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
@@ -29,41 +54,165 @@ class NotificationManager {
             let decodedString = try NSAttributedString(data: data, options: options, documentAttributes: nil).string
             return decodedString
         } catch {
-            print("Error decoding HTML entities: \(error)")
-            return text // Return original text in case of error
+            print("Error decoding HTML: \(error)")
+            return text
         }
     }
-
-    // Sending the trivia notification
+    
+    // Send a multiple-choice trivia notification
     func sendTriviaNotification(trivia: TriviaQuestion) {
+        // Store the trivia question in cache before sending notification
+        TriviaCache.shared.store(trivia)
+        
         let content = UNMutableNotificationContent()
-        content.title = "Trivia Time!"
-
-        // Decode the question and answers
+        content.title = "🎯 Trivia Time"
+        
         let decodedQuestion = decodeHtmlEntities(trivia.question)
-        let decodedAnswers = trivia.allAnswers.shuffled().map {
-            decodeHtmlEntities($0)
-        }
-
-        content.body = "\(decodedQuestion)\n\n" + decodedAnswers.map {
-            $0 == trivia.correct_answer ? "⭐️ \($0)" : $0
-        }.joined(separator: "\n")
+        
+        // Put the question and choices on separate lines
+        content.body = """
+        ❓ \(decodedQuestion)
+        
+        Tap to choose your answer...
+        """
         
         content.sound = .default
-
-        // Schedule the notification with a slight delay
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         
-        // Add a slight delay before adding the notification request
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error scheduling notification: \(error.localizedDescription)")
-                } else {
-                    print("Notification scheduled.")
-                }
+        // Register a category for this trivia question
+        registerCategory(for: trivia)
+        content.categoryIdentifier = trivia.question
+        
+        // Use 1-second trigger for immediate delivery
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling notification: \(error.localizedDescription)")
+            } else {
+                print("Notification scheduled for trivia: \(trivia.question)")
             }
         }
     }
+    
+    // Send result notification with highlighted answers
+    private func sendResultNotification(isCorrect: Bool, userAnswer: String, correctAnswer: String, question: String) {
+        let content = UNMutableNotificationContent()
+        
+        if isCorrect {
+            content.title = "✅ Correct!"
+            content.body = """
+            You got it right!
+            
+            Your answer: \(userAnswer)
+            """
+            content.sound = UNNotificationSound.default
+        } else {
+            content.title = "❌ Incorrect"
+            content.body = """
+            Your answer: \(userAnswer)
+            Correct answer: \(correctAnswer)
+            
+            Tap to continue...
+            """
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(""))
+        }
+        
+        // Use 0.5-second trigger for immediate delivery
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling result notification: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    // Handle user response to the notification
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        
+        // Retrieve trivia question from category identifier
+        let questionIdentifier = response.notification.request.content.categoryIdentifier
+        let selectedAnswer = response.actionIdentifier
+        
+        print("User selected answer: \(selectedAnswer) for question: \(questionIdentifier)")
+        
+        // Check if this is a user action (not the default dismiss action)
+        guard response.actionIdentifier != UNNotificationDefaultActionIdentifier else {
+            completionHandler()
+            return
+        }
+        
+        // Get the stored trivia question
+        if let triviaQuestion = TriviaCache.shared.question(for: questionIdentifier) {
+            let correctAnswer = decodeHtmlEntities(triviaQuestion.correct_answer)
+            let userAnswer = selectedAnswer
+            
+            print("Correct answer: \(correctAnswer), User answer: \(userAnswer)")
+            
+            let isCorrect = userAnswer == correctAnswer
+            
+            // Send result notification instead of showing popup
+            self.sendResultNotification(
+                isCorrect: isCorrect,
+                userAnswer: userAnswer,
+                correctAnswer: correctAnswer,
+                question: self.decodeHtmlEntities(triviaQuestion.question)
+            )
+            
+            // Also show a quick alert for immediate feedback
+            DispatchQueue.main.async {
+                self.showQuickAlert(isCorrect: isCorrect, correctAnswer: correctAnswer)
+            }
+        } else {
+            print("Could not find trivia question for identifier: \(questionIdentifier)")
+        }
+        
+        completionHandler()
+    }
+    
+    // Show a quick alert for immediate feedback
+    private func showQuickAlert(isCorrect: Bool, correctAnswer: String) {
+        let alert = NSAlert()
+        alert.alertStyle = isCorrect ? .informational : .warning
+        alert.addButton(withTitle: "OK")
+        
+        if isCorrect {
+            alert.messageText = "✅ Correct!"
+            alert.informativeText = "Well done! You got it right."
+        } else {
+            alert.messageText = "❌ Incorrect"
+            alert.informativeText = "The correct answer was: \(correctAnswer)"
+        }
+        
+        // Show alert but don't wait for response (non-modal)
+        alert.beginSheetModal(for: NSApplication.shared.windows.first ?? NSWindow()) { _ in }
+    }
+    
+    // Ensure notifications are shown even when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .badge])
+    }
+}
 
+class TriviaCache {
+    static let shared = TriviaCache()
+    private var questions = [String: TriviaQuestion]()
+    
+    func store(_ trivia: TriviaQuestion) {
+        questions[trivia.question] = trivia
+    }
+    
+    func question(for key: String) -> TriviaQuestion? {
+        questions[key]
+    }
+    
+    func clear() {
+        questions.removeAll()
+    }
 }
