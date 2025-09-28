@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import AppKit
+internal import AppKit
 
 class AppCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
@@ -29,14 +29,17 @@ class AppCoordinator: ObservableObject {
     
     func setup() {
         print("🔧 Coordinator setup started")
-        notificationManager.requestPermission()
-        
-        // Immediately send the first notification
-        fetchTriviaAndNotify()
-        
-        // Start the timer for future notifications
-        startNotifications()
+        notificationManager.requestPermission { granted in
+            if granted {
+                // Only send notifications if allowed
+                self.fetchTriviaAndNotify()
+                self.startNotifications()
+            } else {
+                print("⚠️ Notifications not granted")
+            }
+        }
     }
+
     
     private func restartNotifications() {
         timer?.cancel()
