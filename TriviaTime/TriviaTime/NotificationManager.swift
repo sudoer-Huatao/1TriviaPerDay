@@ -65,7 +65,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         TriviaCache.shared.store(trivia)
         
         let content = UNMutableNotificationContent()
-        content.title = "🎯 Trivia Time"
+        content.title = "Your scheduled trivia question:"
         
         let decodedQuestion = decodeHtmlEntities(trivia.question)
         
@@ -73,7 +73,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         content.body = """
         ❓ \(decodedQuestion)
         
-        Tap to choose your answer...
+        Choose your answer:
         """
         
         content.sound = .default
@@ -164,9 +164,11 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             )
             
             // Also show a quick alert for immediate feedback
+            /*
             DispatchQueue.main.async {
                 self.showQuickAlert(isCorrect: isCorrect, correctAnswer: correctAnswer)
             }
+             */
         } else {
             print("Could not find trivia question for identifier: \(questionIdentifier)")
         }
@@ -175,6 +177,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
     
     // Show a quick alert for immediate feedback
+    /*
     private func showQuickAlert(isCorrect: Bool, correctAnswer: String) {
         let alert = NSAlert()
         alert.alertStyle = isCorrect ? .informational : .warning
@@ -191,6 +194,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         // Show alert but don't wait for response (non-modal)
         alert.beginSheetModal(for: NSApplication.shared.windows.first ?? NSWindow()) { _ in }
     }
+     */
     
     // Ensure notifications are shown even when app is in foreground
     func userNotificationCenter(_ center: UNUserNotificationCenter,
